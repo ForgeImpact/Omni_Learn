@@ -1,0 +1,197 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+const InteractiveSimulation = ({
+  simulationData,
+  deviceCapabilities,
+  displayMode
+}) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [complexity, setComplexity] = useState('medium');
+  const [error, setError] = useState(null);
+  const [interactionMode, setInteractionMode] = useState('touch');
+  
+  const simulationContainerRef = useRef(null);
+  
+  // Determine appropriate simulation complexity based on device and display mode
+  useEffect(() => {
+    const determineComplexity = () => {
+      // Check for low memory or data saving mode
+      const isLowResource = navigator.connection?.saveData || 
+                            navigator.deviceMemory < 4;
+                            
+      if (displayMode === 'full' && !isLowResource) {
+        return 'high';
+      } else if (displayMode === 'compact' || isLowResource) {
+        return 'low';
+      } else {
+        return 'medium';
+      }
+    };
+    
+    setComplexity(determineComplexity());
+  }, [displayMode]);
+  
+  // Determine appropriate interaction mode
+  useEffect(() => {
+    const detectInteractionMode = () => {
+      const touchEnabled = 'ontouchstart' in window || 
+                          navigator.maxTouchPoints > 0;
+      
+      if (touchEnabled && displayMode !== 'full') {
+        return 'touch';
+      } else {
+        return 'pointer';
+      }
+    };
+    
+    setInteractionMode(detectInteractionMode());
+    
+    const handleResize = () => {
+      setInteractionMode(detectInteractionMode());
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [displayMode]);
+  
+  // Load simulation based on complexity and data
+  useEffect(() => {
+    if (!simulationData) {
+      setError("No simulation data provided");
+      setIsLoading(false);
+      return;
+    }
+    
+    const loadSimulation = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // In a real implementation, this would load actual simulation assets
+        // based on complexity level and simulation type
+        console.log(`Loading ${simulationData.id} at ${complexity} complexity`);
+        
+        // Simulate loading time
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setIsLoading(false);
+      } catch (err) {
+        console.error("Failed to load simulation:", err);
+        setError("Failed to load simulation. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+    
+    loadSimulation();
+  }, [simulationData, complexity]);
+  
+  // Handle user interactions based on mode
+  useEffect(() => {
+    if (isLoading || error || !simulationContainerRef.current) return;
+    
+    const container = simulationContainerRef.current;
+    
+    const handleInteraction = (event) => {
+      // In a real implementation, this would handle interactions with the simulation
+      console.log(`Simulation interaction: ${event.type}`);
+    };
+    
+    if (interactionMode === 'touch') {
+      container.addEventListener('touchstart', handleInteraction);
+      container.addEventListener('touchmove', handleInteraction);
+      container.addEventListener('touchend', handleInteraction);
+    } else {
+      container.addEventListener('mousedown', handleInteraction);
+      container.addEventListener('mousemove', handleInteraction);
+      container.addEventListener('mouseup', handleInteraction);
+    }
+    
+    return () => {
+      if (interactionMode === 'touch') {
+        container.removeEventListener('touchstart', handleInteraction);
+        container.removeEventListener('touchmove', handleInteraction);
+        container.removeEventListener('touchend', handleInteraction);
+      } else {
+        container.removeEventListener('mousedown', handleInteraction);
+        container.removeEventListener('mousemove', handleInteraction);
+        container.removeEventListener('mouseup', handleInteraction);
+      }
+    };
+  }, [isLoading, error, interactionMode]);
+  
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="simulation-loading">
+        <div className="simulation-loading-indicator"></div>
+        <p>Loading interactive simulation...</p>
+      </div>
+    );
+  }
+  
+  // Render error state
+  if (error) {
+    return (
+      <div className="simulation-error">
+        <p>{error}</p>
+        <button onClick={() => setIsLoading(true)}>Retry</button>
+      </div>
+    );
+  }
+  
+  // Render interactive simulation
+  return (
+    <div className="simulation-container">
+      <h3 className="simulation-title">{simulationData?.title || 'Interactive Simulation'}</h3>
+      
+      <div 
+        ref={simulationContainerRef}
+        className={`simulation-content simulation-content--${complexity} simulation-content--${interactionMode}`}
+        aria-label={`Interactive ${simulationData?.title} simulation`}
+      >
+        {/* Placeholder for the simulation itself */}
+        <div className="simulation-placeholder">
+          {/* In a real implementation, this would be replaced with actual simulation content */}
+          <div className="simulation-canvas">
+            <div className="simulation-elements">
+              <div className="simulation-element element-1"></div>
+              <div className="simulation-element element-2"></div>
+              <div className="simulation-element element-3"></div>
+            </div>
+            <div className="simulation-controls">
+              <button className="simulation-control">Interact</button>
+              <div className="simulation-slider">
+                <input type="range" min="0" max="100" defaultValue="50" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="simulation-instructions">
+        <p>
+          {interactionMode === 'touch' 
+            ? 'Tap and drag elements to interact with the simulation' 
+            : 'Click and drag elements to interact with the simulation'}
+        </p>
+        
+        <div className="complexity-controls">
+          <span>Simulation Detail:</span>
+          <select 
+            value={complexity} 
+            onChange={(e) => setComplexity(e.target.value)}
+            aria-label="Simulation complexity level"
+          >
+            <option value="low">Basic (Faster)</option>
+            <option value="medium">Standard</option>
+            <option value="high">Detailed (Higher Resource Usage)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default InteractiveSimulation;

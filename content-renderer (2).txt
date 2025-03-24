@@ -1,0 +1,257 @@
+import React, { useState, useEffect } from 'react';
+
+const ContentRenderer = ({
+  content,
+  learningMode,
+  displayMode,
+  networkStatus,
+  offlineAvailable
+}) => {
+  const [contentFormat, setContentFormat] = useState('all');
+  const [videoQuality, setVideoQuality] = useState('auto');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState('text');
+  
+  // Determine content format based on learning mode and display
+  useEffect(() => {
+    if (learningMode === 'micro') {
+      setContentFormat('summary');
+    } else if (learningMode === 'deep') {
+      setContentFormat('detailed');
+    } else {
+      setContentFormat('all');
+    }
+  }, [learningMode]);
+  
+  // Set video quality based on network and display mode
+  useEffect(() => {
+    if (networkStatus.isOnline) {
+      if (networkStatus.connectionType === 'wifi' && displayMode === 'full') {
+        setVideoQuality('high');
+      } else if (networkStatus.connectionType === 'wifi') {
+        setVideoQuality('medium');
+      } else if (networkStatus.dataRestricted || displayMode === 'compact') {
+        setVideoQuality('low');
+      } else {
+        setVideoQuality('auto');
+      }
+    } else {
+      setVideoQuality('offline');
+    }
+  }, [networkStatus, displayMode]);
+  
+  // Prepare content based on format
+  const prepareContent = () => {
+    if (!content) return { text: "Content unavailable" };
+    
+    switch (contentFormat) {
+      case 'summary':
+        return {
+          text: content.summary || content.text.substring(0, 200) + '...',
+          video: content.video,
+          simulations: content.simulations?.slice(0, 1) || []
+        };
+      case 'detailed':
+        return {
+          text: content.detailedText || content.text + (content.additionalText || ''),
+          video: content.video,
+          simulations: content.simulations || []
+        };
+      case 'all':
+      default:
+        return content;
+    }
+  };
+  
+  const preparedContent = prepareContent();
+  
+  // Get video URL based on quality setting
+  const getVideoUrl = () => {
+    if (!preparedContent.video) return null;
+    
+    if (videoQuality === 'offline' && offlineAvailable) {
+      return `/offline/videos/${preparedContent.video.split('/').pop().replace('.mp4', '_light.mp4')}`;
+    }
+    
+    const baseUrl = preparedContent.video.split('.mp4')[0];
+    
+    switch (videoQuality) {
+      case 'high':
+        return `${baseUrl}_hd.mp4`;
+      case 'medium':
+        return `${baseUrl}_sd.mp4`;
+      case 'low':
+        return `${baseUrl}_low.mp4`;
+      case 'auto':
+      default:
+        return preparedContent.video;
+    }
+  };
+  
+  // Toggle expanded content view
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded);
+  };
+  
+  // Render mobile view (tabs)
+  if (displayMode === 'compact') {
+    return (
+      <div className="content-renderer content-renderer--compact">
+        <div className="content-tabs">
+          <button 
+            className={`tab ${activeTab === 'text' ? 'active' : ''}`}
+            onClick={() => setActiveTab('text')}
+          >
+            Text
+          </button>
+          <button 
+            className={`tab ${activeTab === 'video' ? 'active' : ''}`}
+            onClick={() => setActiveTab('video')}
+            disabled={!preparedContent.video}
+          >
+            Video
+          </button>
+        </div>
+        
+        <div className="tab-content">
+          {activeTab === 'text' && (
+            <div className="text-content">
+              <p>{preparedContent.text}</p>
+              {contentFormat === 'summary' && (
+                <button className="expand-button" onClick={toggleExpanded}>
+                  Read more
+                </button>
+              )}
+            </div>
+          )}
+          
+          {activeTab === 'video' && preparedContent.video && (
+            <div className="video-content">
+              <video 
+                src={getVideoUrl()} 
+                controls 
+                poster={`/assets/thumbnails/${preparedContent.video.split('/').pop().replace('.mp4', '.jpg')}`}
+                className="video-player"
+              >
+                Your browser doesn't support HTML5 video.
+              </video>
+              
+              {videoQuality !== 'auto' && (
+                <div className="video-quality-indicator">
+                  Quality: {videoQuality.toUpperCase()}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  // Render tablet view (side by side with toggle)
+  if (displayMode === 'medium') {
+    return (
+      <div className="content-renderer content-renderer--medium">
+        <div className={`content-columns ${isExpanded ? 'expanded' : ''}`}>
+          <div className="text-column">
+            <div className="text-content">
+              <p>{preparedContent.text}</p>
+              {contentFormat !== 'detailed' && (
+                <button className="expand-button" onClick={toggleExpanded}>
+                  {isExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {preparedContent.video && (
+            <div className="video-column">
+              <video 
+                src={getVideoUrl()} 
+                controls 
+                poster={`/assets/thumbnails/${preparedContent.video.split('/').pop().replace('.mp4', '.jpg')}`}
+                className="video-player"
+              >
+                Your browser doesn't support HTML5 video.
+              </video>
+              
+              {videoQuality !== 'auto' && (
+                <div className="video-quality-indicator">
+                  Quality: {videoQuality.toUpperCase()}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  // Render desktop view (full content)
+  return (
+    <div className="content-renderer content-renderer--full">
+      <div className="full-content-layout">
+        {preparedContent.video && (
+          <div className="video-section">
+            <video 
+              src={getVideoUrl()} 
+              controls 
+              poster={`/assets/thumbnails/${preparedContent.video.split('/').pop().replace('.mp4', '.jpg')}`}
+              className="video-player"
+            >
+              Your browser doesn't support HTML5 video.
+            </video>
+            
+            {videoQuality !== 'auto' && (
+              <div className="video-quality-indicator">
+                Quality: {videoQuality.toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <div className="text-section">
+          <div className="text-content">
+            <p>{preparedContent.text}</p>
+            
+            {contentFormat === 'summary' && (
+              <button className="expand-button" onClick={toggleExpanded}>
+                {isExpanded ? 'Show less' : 'Show detailed explanation'}
+              </button>
+            )}
+            
+            {isExpanded && contentFormat === 'summary' && content.additionalText && (
+              <div className="expanded-content">
+                <p>{content.additionalText}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Multimedia resources section */}
+      {(contentFormat === 'detailed' || isExpanded) && content.resources && (
+        <div className="resources-section">
+          <h3>Additional Resources</h3>
+          <ul className="resources-list">
+            {content.resources.map((resource, index) => (
+              <li key={index} className="resource-item">
+                <a 
+                  href={resource.url} 
+                  className={`resource-link ${resource.type}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {resource.title}
+                </a>
+                <span className="resource-type">{resource.type}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ContentRenderer;

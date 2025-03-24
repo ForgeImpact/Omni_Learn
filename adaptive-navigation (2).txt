@@ -1,0 +1,32 @@
+import React, { useState } from 'react';
+
+const AdaptiveNavigation = ({
+  currentSection,
+  totalSections,
+  onNext,
+  onPrevious,
+  displayMode
+}) => {
+  const [showSectionList, setShowSectionList] = useState(false);
+  
+  // Mock section data - in a real implementation this would be passed as props
+  const sections = Array.from({ length: totalSections }, (_, i) => ({
+    id: `section-${i + 1}`,
+    title: `Section ${i + 1}`,
+    completed: i < currentSection - 1
+  }));
+  
+  // Handle section selection
+  const handleSectionSelect = (index) => {
+    // In a real implementation, this would navigate to the selected section
+    console.log(`Navigate to section ${index + 1}`);
+    setShowSectionList(false);
+  };
+  
+  // Render compact navigation for mobile
+  if (displayMode === 'compact') {
+    return (
+      <div className="adaptive-navigation adaptive-navigation--compact">
+        <div className="nav-buttons">
+          <button
+            className="nav-button prev-button

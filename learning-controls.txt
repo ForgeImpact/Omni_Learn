@@ -1,0 +1,131 @@
+import React, { useState } from 'react';
+
+const LearningControls = ({
+  currentMode,
+  onModeChange,
+  displayMode
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  
+  // Learning mode options
+  const learningModes = [
+    { 
+      id: 'micro', 
+      name: 'Micro Learning', 
+      icon: '⚡', 
+      description: 'Quick, bite-sized content for learning on the go'
+    },
+    { 
+      id: 'standard', 
+      name: 'Standard', 
+      icon: '📚', 
+      description: 'Balanced content with essential information'
+    },
+    { 
+      id: 'deep', 
+      name: 'Deep Dive', 
+      icon: '🔍', 
+      description: 'In-depth exploration of concepts and principles'
+    }
+  ];
+  
+  // Get current mode details
+  const getCurrentMode = () => {
+    return learningModes.find(mode => mode.id === currentMode) || learningModes[1];
+  };
+  
+  // Toggle expanded controls
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+  };
+  
+  // Handle mode change
+  const handleModeChange = (modeId) => {
+    onModeChange(modeId);
+    setExpanded(false);
+  };
+  
+  // Render compact controls for mobile
+  if (displayMode === 'compact') {
+    return (
+      <div className="learning-controls learning-controls--compact">
+        <button 
+          className="current-mode-button"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+          aria-label="Change learning mode"
+        >
+          <span className="mode-icon">{getCurrentMode().icon}</span>
+          <span className="mode-name">{getCurrentMode().name}</span>
+        </button>
+        
+        {expanded && (
+          <div className="mode-dropdown">
+            {learningModes.map(mode => (
+              <button
+                key={mode.id}
+                className={`mode-option ${mode.id === currentMode ? 'active' : ''}`}
+                onClick={() => handleModeChange(mode.id)}
+              >
+                <span className="mode-icon">{mode.icon}</span>
+                <span className="mode-name">{mode.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Render standard controls for tablet
+  if (displayMode === 'medium') {
+    return (
+      <div className="learning-controls learning-controls--medium">
+        <div className="controls-label">Learning Mode:</div>
+        <div className="mode-buttons">
+          {learningModes.map(mode => (
+            <button
+              key={mode.id}
+              className={`mode-button ${mode.id === currentMode ? 'active' : ''}`}
+              onClick={() => handleModeChange(mode.id)}
+              aria-pressed={mode.id === currentMode}
+              title={mode.description}
+            >
+              <span className="mode-icon">{mode.icon}</span>
+              <span className="mode-name">{mode.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  
+  // Render full controls for desktop
+  return (
+    <div className="learning-controls learning-controls--full">
+      <div className="controls-label">Learning Mode:</div>
+      <div className="mode-buttons">
+        {learningModes.map(mode => (
+          <button
+            key={mode.id}
+            className={`mode-button ${mode.id === currentMode ? 'active' : ''}`}
+            onClick={() => handleModeChange(mode.id)}
+            aria-pressed={mode.id === currentMode}
+          >
+            <span className="mode-icon">{mode.icon}</span>
+            <span className="mode-name">{mode.name}</span>
+            <span className="mode-description">{mode.description}</span>
+          </button>
+        ))}
+      </div>
+      
+      <div className="learning-preferences">
+        <button className="preferences-button" onClick={() => alert('Preferences dialog would open here')}>
+          Customize Learning Experience
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default LearningControls;

@@ -1,0 +1,137 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { optimizeContent } from '../utils/contentUtils';
+import { trackContentInteraction } from '../utils/analyticsUtils';
+
+// Content Type Components
+import TextContent from './content-types/TextContent';
+import VideoContent from './content-types/VideoContent';
+import InteractiveSimulation from './content-types/InteractiveSimulation';
+import InfographicContent from './content-types/InfographicContent';
+import AssessmentContent from './content-types/AssessmentContent';
+import ARContent from './content-types/ARContent';
+
+// Styles
+import '../styles/ContentRenderer.css';
+
+const ContentRenderer = ({ 
+  content, 
+  contentType, 
+  deviceType, 
+  processingCapability, 
+  connectionSpeed,
+  onInteraction,
+  onComplete
+}) => {
+  const [optimizedContent, setOptimizedContent] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [visibilityTracking, setVisibilityTracking] = useState({
+    visible: false,
+    timeVisible: 0,
+    percentViewed: 0
+  });
+  
+  const contentRef = useRef(null);
+  const observerRef = useRef(null);
+  const visibilityTimerRef = useRef(null);
+  
+  // Optimize content based on device capabilities
+  useEffect(() => {
+    const prepareContent = async () => {
+      try {
+        setIsLoading(true);
+        const optimized = await optimizeContent(content, {
+          contentType,
+          deviceType,
+          processingCapability,
+          connectionSpeed
+        });
+        
+        setOptimizedContent(optimized);
+        setIsLoading(false);
+      } catch (err) {
+        setError('Failed to optimize content for your device.');
+        setIsLoading(false);
+        console.error(err);
+      }
+    };
+    
+    prepareContent();
+  }, [content, contentType, deviceType, processingCapability, connectionSpeed]);
+  
+  // Set up visibility tracking
+  useEffect(() => {
+    if (!contentRef.current || !optimizedContent) return;
+    
+    // Create intersection observer to track visibility
+    observerRef.current = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      
+      if (entry.isIntersecting) {
+        setVisibilityTracking(prev => ({...prev, visible: true}));
+        
+        // Start timer to track visibility duration
+        visibilityTimerRef.current = setInterval(() => {
+          setVisibilityTracking(prev => ({
+            ...prev,
+            timeVisible: prev.timeVisible + 1
+          }));
+        }, 1000);
+      } else {
+        setVisibilityTracking(prev => ({...prev, visible: false}));
+        
+        // Clear timer when not visible
+        if (visibilityTimerRef.current) {
+          clearInterval(visibilityTimerRef.current);
+        }
+      }
+    }, { threshold: [0.5] });
+    
+    observerRef.current.observe(contentRef.current);
+    
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+      if (visibilityTimerRef.current) {
+        clearInterval(visibilityTimerRef.current);
+      }
+    };
+  }, [optimizedContent]);
+  
+  // Track content consumption and mark as complete when appropriate
+  useEffect(() => {
+    // Calculate percentage viewed based on content type
+    const calculatePercentViewed = () => {
+      if (!optimizedContent) return 0;
+      
+      switch (contentType) {
+        case 'text':
+          // For text content, use time spent and compare to expected reading time
+          const wordsPerMinute = 200; // Average reading speed
+          const wordCount = optimizedContent.wordCount || 0;
+          const expectedReadingTime = (wordCount / wordsPerMinute) * 60; // in seconds
+          return Math.min(100, Math.round((visibilityTracking.timeVisible / expectedReadingTime) * 100));
+          
+        case 'video':
+          // For video content, use currentTime / duration
+          return Math.round((optimizedContent.currentTime / optimizedContent.duration) * 100);
+          
+        case 'interactive':
+          // For interactive content, use completion percentage from the content itself
+          return optimizedContent.completionPercentage || 0;
+          
+        default:
+          return visibilityTracking.timeVisible > 10 ? 100 : 0;
+      }
+    };
+    
+    const percentViewed = calculatePercentViewed();
+    setVisibilityTracking(prev => ({...prev, percentViewed}));
+    
+    // Track content interaction
+    trackContentInteraction({
+      contentId: optimizedContent?.id,
+      contentType,
+      percentViewed,
+      timeVisible: visibilityTracking

@@ -1,0 +1,301 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { UserContext } from '../contexts/UserContext';
+import { DeviceContext } from '../contexts/DeviceContext';
+import { fetchModuleContent, updateUserProgress } from '../api/learningApi';
+import { detectLearningStyle } from '../utils/analyticsUtils';
+
+// Components
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import ErrorMessage from '../components/common/ErrorMessage';
+import AvatarDisplay from '../components/avatar/AvatarDisplay';
+import ContentRenderer from '../components/content/ContentRenderer';
+import InteractionPanel from '../components/interaction/InteractionPanel';
+import ProgressBar from '../components/common/ProgressBar';
+import AdaptiveNavigation from '../components/navigation/AdaptiveNavigation';
+import AssessmentEngine from '../components/assessment/AssessmentEngine';
+import CollaborationPanel from '../components/collaboration/CollaborationPanel';
+
+// Styles
+import '../styles/ModuleView.css';
+
+const ModuleView = () => {
+  // Router and Context
+  const { moduleId, unitId } = useParams();
+  const navigate = useNavigate();
+  const { user, updateUserData } = useContext(UserContext);
+  const { deviceType, screenSize, processingCapability, connectionSpeed } = useContext(DeviceContext);
+  
+  // State
+  const [moduleData, setModuleData] = useState(null);
+  const [currentUnit, setCurrentUnit] = useState(unitId || null);
+  const [currentSegment, setCurrentSegment] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [avatarMode, setAvatarMode] = useState('default');
+  const [learningMetrics, setLearningMetrics] = useState({
+    timeSpent: 0,
+    interactionCount: 0,
+    completedSegments: [],
+    assessmentScores: {}
+  });
+  
+  // Timer for tracking time spent on module
+  const [timer, setTimer] = useState(null);
+  
+  useEffect(() => {
+    // Start timer when component mounts
+    const intervalId = setInterval(() => {
+      setLearningMetrics(prev => ({
+        ...prev,
+        timeSpent: prev.timeSpent + 1
+      }));
+    }, 1000);
+    setTimer(intervalId);
+    
+    // Fetch module data
+    const loadModuleData = async () => {
+      try {
+        setIsLoading(true);
+        const data = await fetchModuleContent(moduleId, {
+          deviceType,
+          processingCapability,
+          connectionSpeed,
+          userPreferences: user.preferences
+        });
+        setModuleData(data);
+        
+        // If no unit specified, start with the first one or resume from last session
+        if (!unitId) {
+          const lastAccessedUnit = user.progress?.[moduleId]?.lastAccessedUnit;
+          setCurrentUnit(lastAccessedUnit || data.units[0].id);
+        }
+        
+        setIsLoading(false);
+      } catch (err) {
+        setError('Failed to load module content. Please try again.');
+        setIsLoading(false);
+        console.error(err);
+      }
+    };
+    
+    loadModuleData();
+    
+    // Clean up timer on unmount
+    return () => {
+      clearInterval(timer);
+      // Save progress when leaving the module
+      saveProgress();
+    };
+  }, [moduleId, deviceType, processingCapability, connectionSpeed]);
+  
+  // Save user progress
+  const saveProgress = async () => {
+    if (!user.id || !moduleData) return;
+    
+    try {
+      const progressData = {
+        moduleId,
+        userId: user.id,
+        lastAccessedUnit: currentUnit,
+        lastAccessedSegment: currentSegment,
+        completedSegments: learningMetrics.completedSegments,
+        timeSpent: learningMetrics.timeSpent,
+        assessmentScores: learningMetrics.assessmentScores
+      };
+      
+      await updateUserProgress(progressData);
+      updateUserData({ progress: { ...user.progress, [moduleId]: progressData } });
+    } catch (err) {
+      console.error('Failed to save progress:', err);
+    }
+  };
+  
+  // Handle segment completion
+  const handleSegmentComplete = (segmentId) => {
+    if (!learningMetrics.completedSegments.includes(segmentId)) {
+      setLearningMetrics(prev => ({
+        ...prev,
+        completedSegments: [...prev.completedSegments, segmentId]
+      }));
+    }
+    
+    // Analyze learning style based on interactions
+    const learningStyle = detectLearningStyle(learningMetrics);
+    
+    // If this is the last segment in the unit, show assessment
+    const currentUnitData = moduleData.units.find(u => u.id === currentUnit);
+    if (currentUnitData.segments.length === currentSegment + 1) {
+      setAvatarMode('assessment');
+    } else {
+      // Otherwise, move to next segment
+      setCurrentSegment(prev => prev + 1);
+    }
+    
+    // Save progress after each segment
+    saveProgress();
+  };
+  
+  // Handle assessment completion
+  const handleAssessmentComplete = (score, assessmentId) => {
+    setLearningMetrics(prev => ({
+      ...prev,
+      assessmentScores: {
+        ...prev.assessmentScores,
+        [assessmentId]: score
+      }
+    }));
+    
+    // Move to next unit if available
+    const unitIndex = moduleData.units.findIndex(u => u.id === currentUnit);
+    if (unitIndex < moduleData.units.length - 1) {
+      setCurrentUnit(moduleData.units[unitIndex + 1].id);
+      setCurrentSegment(0);
+      setAvatarMode('default');
+    } else {
+      // Module completed
+      setAvatarMode('celebration');
+      // After delay, navigate to module completion screen
+      setTimeout(() => {
+        navigate(`/module/${moduleId}/complete`);
+      }, 3000);
+    }
+    
+    saveProgress();
+  };
+  
+  // Handle user interaction
+  const handleInteraction = (interactionType, data) => {
+    setLearningMetrics(prev => ({
+      ...prev,
+      interactionCount: prev.interactionCount + 1
+    }));
+    
+    // Update avatar mode based on interaction
+    switch (interactionType) {
+      case 'question':
+        setAvatarMode('thinking');
+        break;
+      case 'error':
+        setAvatarMode('concerned');
+        break;
+      case 'success':
+        setAvatarMode('excited');
+        break;
+      default:
+        setAvatarMode('default');
+    }
+  };
+  
+  if (isLoading) return <LoadingSpinner />;
+  if (error) return <ErrorMessage message={error} />;
+  if (!moduleData) return <ErrorMessage message="Module data not found" />;
+  
+  const currentUnitData = moduleData.units.find(u => u.id === currentUnit);
+  const currentSegmentData = currentUnitData?.segments[currentSegment];
+  
+  // Calculate progress percentage
+  const completedUnits = moduleData.units.filter(unit => {
+    const unitSegments = unit.segments.map(segment => segment.id);
+    return unitSegments.every(id => learningMetrics.completedSegments.includes(id));
+  }).length;
+  
+  const progressPercentage = Math.round(
+    (completedUnits / moduleData.units.length) * 100
+  );
+  
+  // Determine avatar rendering mode based on device capabilities
+  const getAvatarRenderMode = () => {
+    if (deviceType === 'desktop' && processingCapability === 'high') {
+      return '3d';
+    } else if (deviceType === 'tablet' || processingCapability === 'medium') {
+      return '2.5d';
+    } else {
+      return '2d';
+    }
+  };
+  
+  return (
+    <div className={`module-view module-view-${deviceType}`}>
+      <header className="module-header">
+        <h1>{moduleData.title}</h1>
+        <ProgressBar 
+          percentage={progressPercentage} 
+          label={`${completedUnits}/${moduleData.units.length} units completed`} 
+        />
+      </header>
+      
+      <div className="module-content">
+        <aside className={`avatar-container avatar-${deviceType}`}>
+          <AvatarDisplay 
+            mode={avatarMode}
+            renderMode={getAvatarRenderMode()}
+            processingCapability={processingCapability}
+          />
+        </aside>
+        
+        <main className="content-container">
+          {currentSegmentData && (
+            <ContentRenderer 
+              content={currentSegmentData.content}
+              contentType={currentSegmentData.type}
+              deviceType={deviceType}
+              processingCapability={processingCapability}
+              connectionSpeed={connectionSpeed}
+              onInteraction={handleInteraction}
+              onComplete={() => handleSegmentComplete(currentSegmentData.id)}
+            />
+          )}
+          
+          {avatarMode === 'assessment' && (
+            <AssessmentEngine 
+              unitId={currentUnit}
+              moduleId={moduleId}
+              deviceType={deviceType}
+              processingCapability={processingCapability}
+              onComplete={handleAssessmentComplete}
+            />
+          )}
+        </main>
+        
+        <aside className="interaction-container">
+          <InteractionPanel 
+            deviceType={deviceType}
+            segmentType={currentSegmentData?.type}
+            onInteraction={handleInteraction}
+          />
+          
+          {deviceType !== 'mobile' && (
+            <CollaborationPanel 
+              moduleId={moduleId}
+              unitId={currentUnit}
+              userId={user.id}
+              deviceType={deviceType}
+            />
+          )}
+        </aside>
+      </div>
+      
+      <footer className="module-footer">
+        <AdaptiveNavigation 
+          units={moduleData.units}
+          currentUnit={currentUnit}
+          currentSegment={currentSegment}
+          deviceType={deviceType}
+          completedSegments={learningMetrics.completedSegments}
+          onUnitChange={unitId => {
+            setCurrentUnit(unitId);
+            setCurrentSegment(0);
+            saveProgress();
+          }}
+          onSegmentChange={segmentIndex => {
+            setCurrentSegment(segmentIndex);
+            saveProgress();
+          }}
+        />
+      </footer>
+    </div>
+  );
+};
+
+export default ModuleView;

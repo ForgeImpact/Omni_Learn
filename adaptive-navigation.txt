@@ -1,0 +1,157 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Menu, Check } from 'lucide-react';
+
+// Styles
+import '../styles/AdaptiveNavigation.css';
+
+const AdaptiveNavigation = ({
+  units,
+  currentUnit,
+  currentSegment,
+  deviceType,
+  completedSegments,
+  onUnitChange,
+  onSegmentChange
+}) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [currentUnitData, setCurrentUnitData] = useState(null);
+  const menuRef = useRef(null);
+  
+  // Find the current unit data
+  useEffect(() => {
+    const unitData = units.find(u => u.id === currentUnit);
+    setCurrentUnitData(unitData || null);
+  }, [units, currentUnit]);
+  
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+  
+  // Check if the segment is completed
+  const isSegmentCompleted = (unitId, segmentIndex) => {
+    const unit = units.find(u => u.id === unitId);
+    if (!unit || !unit.segments[segmentIndex]) return false;
+    
+    const segmentId = unit.segments[segmentIndex].id;
+    return completedSegments.includes(segmentId);
+  };
+  
+  // Check if the unit is completed
+  const isUnitCompleted = (unitId) => {
+    const unit = units.find(u => u.id === unitId);
+    if (!unit) return false;
+    
+    return unit.segments.every((segment, index) => 
+      isSegmentCompleted(unitId, index)
+    );
+  };
+  
+  // Navigate to previous segment or unit
+  const navigatePrevious = () => {
+    if (currentSegment > 0) {
+      // Go to previous segment in current unit
+      onSegmentChange(currentSegment - 1);
+    } else {
+      // Go to last segment of previous unit
+      const currentUnitIndex = units.findIndex(u => u.id === currentUnit);
+      if (currentUnitIndex > 0) {
+        const prevUnit = units[currentUnitIndex - 1];
+        onUnitChange(prevUnit.id);
+        onSegmentChange(prevUnit.segments.length - 1);
+      }
+    }
+  };
+  
+  // Navigate to next segment or unit
+  const navigateNext = () => {
+    if (currentUnitData && currentSegment < currentUnitData.segments.length - 1) {
+      // Go to next segment in current unit
+      onSegmentChange(currentSegment + 1);
+    } else {
+      // Go to first segment of next unit
+      const currentUnitIndex = units.findIndex(u => u.id === currentUnit);
+      if (currentUnitIndex < units.length - 1) {
+        const nextUnit = units[currentUnitIndex + 1];
+        onUnitChange(nextUnit.id);
+        onSegmentChange(0);
+      }
+    }
+  };
+  
+  // Get navigation label
+  const getNavigationLabel = () => {
+    if (!currentUnitData) return '';
+    
+    const unitNumber = units.findIndex(u => u.id === currentUnit) + 1;
+    const segmentNumber = currentSegment + 1;
+    
+    return `Unit ${unitNumber}: ${currentUnitData.title} - Segment ${segmentNumber}/${currentUnitData.segments.length}`;
+  };
+  
+  // Render navigation menu
+  const renderMenu = () => {
+    return (
+      <div 
+        ref={menuRef}
+        className={`navigation-menu ${isMenuOpen ? 'open' : ''} device-${deviceType}`}
+      >
+        <div className="menu-header">
+          <h3>Module Navigation</h3>
+          <button 
+            className="close-menu-button"
+            onClick={() => setIsMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            &times;
+          </button>
+        </div>
+        
+        <div className="menu-content">
+          {units.map((unit, unitIndex) => (
+            <div 
+              key={unit.id} 
+              className={`menu-unit ${unit.id === currentUnit ? 'active' : ''}`}
+            >
+              <div 
+                className={`unit-header ${isUnitCompleted(unit.id) ? 'completed' : ''}`}
+                onClick={() => {
+                  onUnitChange(unit.id);
+                  onSegmentChange(0);
+                  setIsMenuOpen(false);
+                }}
+              >
+                <span className="unit-title">
+                  {unitIndex + 1}. {unit.title}
+                </span>
+                {isUnitCompleted(unit.id) && (
+                  <Check size={16} className="completed-icon" />
+                )}
+              </div>
+              
+              {unit.id === currentUnit && (
+                <div className="unit-segments">
+                  {unit.segments.map((segment, segmentIndex) => (
+                    <div 
+                      key={segment.id}
+                      className={`segment-item ${segmentIndex === currentSegment ? 'active' : ''} ${
+                        isSegmentCompleted(unit.id, segmentIndex) ? 'completed' : ''
+                      }`}
+                      onClick={() => {
+                        onSegmentChange(segmentIndex);
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <span className="segment-title">
+                        {segmentIndex + 1}. {segment.title}
+                      </span>
+                      {isSegmentCompleted(unit.id, segmentIndex) && (

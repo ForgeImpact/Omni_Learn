@@ -1,0 +1,157 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+const AvatarSystem = ({ displayMode, deviceCapabilities, sectionContext }) => {
+  const [avatarType, setAvatarType] = useState('text');
+  const [avatarReady, setAvatarReady] = useState(false);
+  const [avatarState, setAvatarState] = useState({
+    emotion: 'neutral',
+    speaking: false,
+    gesture: 'idle'
+  });
+  
+  const avatarContainerRef = useRef(null);
+  
+  // Determine avatar type based on device capabilities and display mode
+  useEffect(() => {
+    const determineAvatarType = () => {
+      // High-end devices get 3D avatars
+      if (
+        displayMode === 'full' && 
+        window.innerWidth >= 1024 && 
+        !navigator.connection?.saveData
+      ) {
+        return '3d';
+      }
+      
+      // Mid-range devices get 2D animated avatars
+      if (
+        displayMode === 'medium' || 
+        (window.innerWidth >= 768 && window.innerWidth < 1024)
+      ) {
+        return '2d';
+      }
+      
+      // Low-end devices get text-based or minimal avatars
+      return 'text';
+    };
+    
+    setAvatarType(determineAvatarType());
+    
+    // Listen for resize events to adapt avatar
+    const handleResize = () => {
+      setAvatarType(determineAvatarType());
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [displayMode]);
+  
+  // Initialize avatar based on type
+  useEffect(() => {
+    const initializeAvatar = async () => {
+      setAvatarReady(false);
+      
+      try {
+        if (avatarType === '3d') {
+          // In a real implementation, load 3D avatar resources
+          // This could use three.js or a similar web 3D library
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate loading
+        } else if (avatarType === '2d') {
+          // Load 2D avatar (could use Lottie animations or SVG)
+          await new Promise(resolve => setTimeout(resolve, 500)); // Simulate loading
+        } else {
+          // Text avatar requires minimal loading
+          await new Promise(resolve => setTimeout(resolve, 100)); // Simulate loading
+        }
+        
+        setAvatarReady(true);
+      } catch (error) {
+        console.error("Failed to load avatar:", error);
+        // Fallback to simpler avatar type
+        if (avatarType !== 'text') {
+          setAvatarType('text');
+        }
+      }
+    };
+    
+    initializeAvatar();
+  }, [avatarType]);
+  
+  // Update avatar state based on section context
+  useEffect(() => {
+    if (avatarReady && sectionContext) {
+      // In a real implementation, analyze section context
+      // to determine appropriate avatar emotions/gestures
+      const newState = {
+        emotion: sectionContext.emotionalTone || 'neutral',
+        speaking: true,
+        gesture: sectionContext.conceptComplexity > 0.7 ? 'explaining' : 'conversational'
+      };
+      
+      setAvatarState(newState);
+    }
+  }, [avatarReady, sectionContext]);
+  
+  // Render loading state
+  if (!avatarReady) {
+    return (
+      <div className="avatar-loading">
+        <div className="avatar-loading-indicator"></div>
+      </div>
+    );
+  }
+  
+  // Render appropriate avatar based on type
+  return (
+    <div 
+      ref={avatarContainerRef} 
+      className={`avatar-container avatar-${avatarType}`}
+      aria-label="Learning assistant avatar"
+    >
+      {avatarType === '3d' && (
+        <div className="avatar-3d-container">
+          {/* In a real implementation, this would be a Three.js canvas or similar */}
+          <div className="avatar-3d-placeholder">
+            <img 
+              src="/assets/avatars/3d-avatar.png" 
+              alt="3D learning assistant" 
+              className={`emotion-${avatarState.emotion} ${avatarState.speaking ? 'speaking' : ''}`}
+            />
+          </div>
+        </div>
+      )}
+      
+      {avatarType === '2d' && (
+        <div className="avatar-2d-container">
+          <img 
+            src={`/assets/avatars/2d-avatar-${avatarState.emotion}.svg`}
+            alt="2D learning assistant" 
+            className={avatarState.speaking ? 'speaking' : ''}
+          />
+        </div>
+      )}
+      
+      {avatarType === 'text' && (
+        <div className="avatar-text-container">
+          <div className="avatar-emoji">
+            {avatarState.emotion === 'neutral' && '🧑‍🏫'}
+            {avatarState.emotion === 'excited' && '😀'}
+            {avatarState.emotion === 'thoughtful' && '🤔'}
+            {avatarState.emotion === 'concerned' && '😟'}
+          </div>
+          <div className="avatar-name">Assistant</div>
+        </div>
+      )}
+      
+      {/* Accessibility description */}
+      <span className="sr-only">
+        Learning assistant is currently {avatarState.speaking ? 'speaking' : 'listening'} 
+        with a {avatarState.emotion} expression.
+      </span>
+    </div>
+  );
+};
+
+export default AvatarSystem;

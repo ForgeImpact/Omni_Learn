@@ -1,0 +1,152 @@
+import React, { useState, useEffect } from 'react';
+import { fetchAssessment, submitAssessmentAnswer } from '../api/assessmentApi';
+import { trackAssessmentInteraction } from '../utils/analyticsUtils';
+
+// Question type components
+import MultipleChoice from './questions/MultipleChoice';
+import ShortAnswer from './questions/ShortAnswer';
+import DragAndDrop from './questions/DragAndDrop';
+import ImageHotspot from './questions/ImageHotspot';
+import CodeExercise from './questions/CodeExercise';
+
+// Styles
+import '../styles/AssessmentEngine.css';
+
+const AssessmentEngine = ({
+  unitId,
+  moduleId,
+  deviceType,
+  processingCapability,
+  onComplete
+}) => {
+  const [assessment, setAssessment] = useState(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [userAnswers, setUserAnswers] = useState({});
+  const [questionResults, setQuestionResults] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assessmentComplete, setAssessmentComplete] = useState(false);
+  const [finalScore, setFinalScore] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Load assessment data
+  useEffect(() => {
+    const loadAssessment = async () => {
+      try {
+        setIsLoading(true);
+        const assessmentData = await fetchAssessment(moduleId, unitId, { 
+          deviceType, 
+          processingCapability 
+        });
+        
+        setAssessment(assessmentData);
+        
+        // Initialize user answers
+        const initialAnswers = {};
+        assessmentData.questions.forEach(question => {
+          initialAnswers[question.id] = null;
+        });
+        setUserAnswers(initialAnswers);
+        
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Failed to load assessment:', err);
+        setError('Failed to load assessment. Please try again.');
+        setIsLoading(false);
+      }
+    };
+    
+    loadAssessment();
+  }, [moduleId, unitId, deviceType, processingCapability]);
+  
+  // Handle answer submission for current question
+  const handleAnswerSubmit = async (questionId, answer) => {
+    try {
+      setIsSubmitting(true);
+      
+      // Update user answers
+      setUserAnswers(prev => ({
+        ...prev,
+        [questionId]: answer
+      }));
+      
+      // Submit answer for evaluation
+      const result = await submitAssessmentAnswer(moduleId, unitId, questionId, answer);
+      
+      // Update question results
+      setQuestionResults(prev => ({
+        ...prev,
+        [questionId]: result
+      }));
+      
+      // Track interaction for analytics
+      trackAssessmentInteraction({
+        moduleId,
+        unitId,
+        questionId,
+        correct: result.correct,
+        attemptCount: result.attemptCount || 1,
+        timeTaken: result.timeTaken || 0
+      });
+      
+      setIsSubmitting(false);
+      
+      // Move to next question or complete assessment
+      if (currentQuestionIndex < assessment.questions.length - 1) {
+        // Delay to allow user to see the result
+        setTimeout(() => {
+          setCurrentQuestionIndex(prev => prev + 1);
+        }, 1500);
+      } else {
+        // Assessment completed
+        const totalQuestions = assessment.questions.length;
+        const correctAnswers = Object.values(questionResults).filter(result => result?.correct).length;
+        const score = Math.round((correctAnswers / totalQuestions) * 100);
+        
+        setFinalScore(score);
+        setAssessmentComplete(true);
+        
+        // Notify parent component
+        if (onComplete) {
+          onComplete(score, assessment.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit answer:', err);
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Render the appropriate question component based on type
+  const renderQuestion = (question) => {
+    if (!question) return null;
+    
+    const commonProps = {
+      question,
+      onSubmit: answer => handleAnswerSubmit(question.id, answer),
+      deviceType,
+      processingCapability,
+      isSubmitting,
+      result: questionResults[question.id],
+      userAnswer: userAnswers[question.id]
+    };
+    
+    switch (question.type) {
+      case 'multiple-choice':
+        return <MultipleChoice {...commonProps} />;
+        
+      case 'short-answer':
+        return <ShortAnswer {...commonProps} />;
+        
+      case 'drag-and-drop':
+        // Only render drag and drop for tablet and desktop
+        if (deviceType === 'mobile') {
+          // Fallback to multiple choice for mobile devices
+          return <MultipleChoice {...commonProps} question={{...question, type: 'multiple-choice'}} />;
+        }
+        return <DragAndDrop {...commonProps} />;
+        
+      case 'image-hotspot':
+        // Only render hotspot for medium to high capability devices
+        if (processingCapability === 'low' || deviceType === 'mobile') {
+          //

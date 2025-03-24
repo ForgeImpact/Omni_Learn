@@ -1,0 +1,113 @@
+/* ProgressSummary.css */
+.progress-summary-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  margin: 0;
+}
+
+.progress-text {
+  font-size: 14px;
+  color: #666;
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: #e6e6e6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-filled {
+  height: 100%;
+  background-color: #4e5de2;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-percentage {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4e5de2;
+  align-self: flex-end;
+}
+
+.additional-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f7ff;
+  border-radius: 8px;
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #e0e4ff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.certificate-icon::before {
+  content: "";
+  display: block;
+  width: 20px;
+  height: 20px;
+  background-image: url('../assets/certificate-icon.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.quiz-icon::before {
+  content: "";
+  display: block;
+  width: 20px;
+  height: 20px;
+  background-image: url('../assets/quiz-icon.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+}

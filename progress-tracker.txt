@@ -1,0 +1,56 @@
+import React from 'react';
+
+const ProgressTracker = ({
+  currentSection,
+  totalSections,
+  completionPercentage
+}) => {
+  // Generate section indicators
+  const renderSectionIndicators = () => {
+    const indicators = [];
+    
+    for (let i = 1; i <= totalSections; i++) {
+      const status = i < currentSection ? 'completed' : 
+                    i === currentSection ? 'current' : 'upcoming';
+                    
+      indicators.push(
+        <div 
+          key={i} 
+          className={`section-indicator section-indicator--${status}`}
+          aria-label={`Section ${i}, ${status}`}
+        >
+          <span className="indicator-number">{i}</span>
+        </div>
+      );
+    }
+    
+    return indicators;
+  };
+  
+  return (
+    <div className="progress-tracker">
+      <div className="progress-bar-container">
+        <div 
+          className="progress-bar" 
+          style={{ width: `${completionPercentage}%` }}
+          role="progressbar"
+          aria-valuenow={completionPercentage}
+          aria-valuemin="0"
+          aria-valuemax="100"
+        ></div>
+      </div>
+      
+      <div className="section-indicators">
+        {renderSectionIndicators()}
+      </div>
+      
+      <div className="progress-text">
+        <span className="current-section">Section {currentSection}</span>
+        <span className="total-sections">of {totalSections}</span>
+        <span className="completion-percentage">({Math.round(completionPercentage)}% Complete)</span>
+      </div>
+    </div>
+  );
+};
+
+export default ProgressTracker;

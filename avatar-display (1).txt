@@ -1,0 +1,286 @@
+import React, { useState, useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { loadAvatarModel, loadAvatarAnimation } from '../api/avatarApi';
+import { getEmotionMapping } from '../utils/avatarUtils';
+
+// 2D Avatar Components
+import Avatar2D from './avatar/Avatar2D';
+import AvatarEmoji from './avatar/AvatarEmoji';
+
+// Styles
+import '../styles/AvatarDisplay.css';
+
+const AvatarDisplay = ({ 
+  mode, 
+  renderMode, 
+  processingCapability,
+  customization = {} 
+}) => {
+  const [avatarState, setAvatarState] = useState({
+    model: null,
+    animation: null,
+    emotion: 'neutral',
+    isLoading: true,
+    error: null
+  });
+  
+  const canvasRef = useRef(null);
+  const rendererRef = useRef(null);
+  const sceneRef = useRef(null);
+  const cameraRef = useRef(null);
+  const animationMixerRef = useRef(null);
+  const clockRef = useRef(new THREE.Clock());
+  
+  // Load avatar model and animations
+  useEffect(() => {
+    // Only load 3D models for 3D or 2.5D rendering modes
+    if (renderMode === '3d' || renderMode === '2.5d') {
+      const loadModel = async () => {
+        try {
+          setAvatarState(prev => ({ ...prev, isLoading: true }));
+          
+          // Load model with appropriate level of detail based on renderMode
+          const modelDetail = renderMode === '3d' ? 'high' : 'medium';
+          const model = await loadAvatarModel(customization, modelDetail);
+          
+          // Load animation based on mode
+          const emotion = getEmotionMapping(mode);
+          const animation = await loadAvatarAnimation(emotion, modelDetail);
+          
+          setAvatarState(prev => ({
+            ...prev,
+            model,
+            animation,
+            emotion,
+            isLoading: false
+          }));
+        } catch (err) {
+          console.error('Failed to load avatar model:', err);
+          setAvatarState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Failed to load avatar'
+          }));
+        }
+      };
+      
+      loadModel();
+    } else {
+      // For 2D mode, just set the emotion
+      const emotion = getEmotionMapping(mode);
+      setAvatarState(prev => ({
+        ...prev,
+        emotion,
+        isLoading: false
+      }));
+    }
+  }, [renderMode, mode, customization]);
+  
+  // Set up 3D scene
+  useEffect(() => {
+    if (renderMode !== '3d' && renderMode !== '2.5d') return;
+    if (!canvasRef.current || !avatarState.model) return;
+    
+    // Set up scene, camera, and renderer
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+    
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    
+    // Add directional light
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(0, 10, 10);
+    scene.add(directionalLight);
+    
+    // Camera setup
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      canvasRef.current.clientWidth / canvasRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 1.6, 3);
+    camera.lookAt(0, 1.6, 0);
+    cameraRef.current = camera;
+    
+    // Renderer setup
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      antialias: renderMode === '3d',
+      alpha: true
+    });
+    renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.shadowMap.enabled = renderMode === '3d';
+    rendererRef.current = renderer;
+    
+    // Add model to scene
+    const modelScene = avatarState.model.scene.clone();
+    scene.add(modelScene);
+    
+    // Set up animation mixer
+    const mixer = new THREE.AnimationMixer(modelScene);
+    animationMixerRef.current = mixer;
+    
+    // Play animation
+    if (avatarState.animation) {
+      const action = mixer.clipAction(avatarState.animation);
+      action.play();
+    }
+    
+    // Animation loop
+    const animate = () => {
+      if (!rendererRef.current) return;
+      
+      const delta = clockRef.current.getDelta();
+      if (mixer) mixer.update(delta);
+      
+      rendererRef.current.render(scene, camera);
+      requestAnimationFrame(animate);
+    };
+    
+    animate();
+    
+    // Handle window resize
+    const handleResize = () => {
+      if (!canvasRef.current || !rendererRef.current || !cameraRef.current) return;
+      
+      const width = canvasRef.current.clientWidth;
+      const height = canvasRef.current.clientHeight;
+      
+      cameraRef.current.aspect = width / height;
+      cameraRef.current.updateProjectionMatrix();
+      
+      rendererRef.current.setSize(width, height);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      
+      // Clean up resources
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+      
+      if (sceneRef.current) {
+        sceneRef.current.clear();
+        sceneRef.current = null;
+      }
+      
+      if (animationMixerRef.current) {
+        animationMixerRef.current = null;
+      }
+    };
+  }, [avatarState.model, avatarState.animation, renderMode]);
+  
+  // Update animation when mode changes
+  useEffect(() => {
+    if (renderMode !== '3d' && renderMode !== '2.5d') return;
+    if (!animationMixerRef.current || !avatarState.model) return;
+    
+    const updateAnimation = async () => {
+      try {
+        const emotion = getEmotionMapping(mode);
+        
+        // Only load new animation if emotion has changed
+        if (emotion !== avatarState.emotion) {
+          const modelDetail = renderMode === '3d' ? 'high' : 'medium';
+          const animation = await loadAvatarAnimation(emotion, modelDetail);
+          
+          // Stop all current animations
+          animationMixerRef.current.stopAllAction();
+          
+          // Play new animation
+          const action = animationMixerRef.current.clipAction(animation);
+          action.play();
+          
+          setAvatarState(prev => ({
+            ...prev,
+            animation,
+            emotion
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to update avatar animation:', err);
+      }
+    };
+    
+    updateAnimation();
+  }, [mode, renderMode, avatarState.emotion, avatarState.model]);
+  
+  // Render avatar based on renderMode
+  const renderAvatar = () => {
+    if (avatarState.isLoading) {
+      return <div className="avatar-loading">Loading avatar...</div>;
+    }
+    
+    if (avatarState.error) {
+      return <div className="avatar-error">{avatarState.error}</div>;
+    }
+    
+    switch (renderMode) {
+      case '3d':
+      case '2.5d':
+        return (
+          <canvas 
+            ref={canvasRef} 
+            className={`avatar-canvas avatar-${renderMode}`} 
+            width="300" 
+            height="400"
+          />
+        );
+        
+      case '2d':
+        return (
+          <Avatar2D 
+            emotion={avatarState.emotion} 
+            customization={customization}
+          />
+        );
+        
+      default:
+        // Fallback to emoji for low-end devices
+        return (
+          <AvatarEmoji emotion={avatarState.emotion} />
+        );
+    }
+  };
+  
+  return (
+    <div className={`avatar-display avatar-mode-${mode} avatar-render-${renderMode}`}>
+      {renderAvatar()}
+      {processingCapability === 'low' && (
+        <div className="avatar-caption">
+          {getAvatarCaption(mode)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper function to get caption text based on avatar mode
+const getAvatarCaption = (mode) => {
+  switch (mode) {
+    case 'thinking':
+      return 'Thinking...';
+    case 'excited':
+      return 'Great job!';
+    case 'concerned':
+      return 'Let me help you with that.';
+    case 'assessment':
+      return 'Time to test your knowledge!';
+    case 'celebration':
+      return 'Congratulations!';
+    default:
+      return '';
+  }
+};
+
+export default AvatarDisplay;
